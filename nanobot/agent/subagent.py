@@ -14,6 +14,7 @@ from nanobot.providers.base import LLMProvider
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.filesystem import ReadFileTool, WriteFileTool, ListDirTool
 from nanobot.agent.tools.shell import ExecTool
+from nanobot.agent.tools.progress import ProgressTool
 from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
 
 
@@ -109,6 +110,13 @@ class SubagentManager:
             ))
             tools.register(WebSearchTool(api_key=self.brave_api_key))
             tools.register(WebFetchTool())
+            
+            # Progress tool -- lets the subagent send status updates to the user
+            tools.register(ProgressTool(
+                send_callback=self.bus.publish_outbound,
+                channel=origin["channel"],
+                chat_id=origin["chat_id"],
+            ))
             
             # Build messages with subagent-specific prompt
             system_prompt = self._build_subagent_prompt(task)
@@ -227,10 +235,16 @@ You are a subagent spawned by the main agent to complete a specific task.
 - Read and write files in the workspace
 - Execute shell commands
 - Search the web and fetch web pages
+- Send progress updates to the user via the `progress` tool
 - Complete the task thoroughly
 
+## Progress Updates
+Use the `progress` tool to keep the user informed during multi-step work.
+For example, call `progress` with a short message like "Searching the web for recent articles..."
+before starting a lengthy operation. Do not over-use it -- one update per major phase is enough.
+
 ## What You Cannot Do
-- Send messages directly to users (no message tool available)
+- Send full messages directly to users (use `progress` for brief status updates only)
 - Spawn other subagents
 - Access the main agent's conversation history
 

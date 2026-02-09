@@ -117,6 +117,12 @@ class ChannelsConfig(BaseModel):
     qq: QQConfig = Field(default_factory=QQConfig)
 
 
+class ProgressConfig(BaseModel):
+    """Progress notification configuration for long-running tasks."""
+    enabled: bool = True
+    delay_seconds: float = 10.0  # Auto-acknowledge after this many seconds of processing
+
+
 class AgentDefaults(BaseModel):
     """Default agent configuration."""
     workspace: str = "~/.nanobot/workspace"
@@ -124,6 +130,7 @@ class AgentDefaults(BaseModel):
     max_tokens: int = 8192
     temperature: float = 0.7
     max_tool_iterations: int = 20
+    progress: ProgressConfig = Field(default_factory=ProgressConfig)
 
 
 class AgentsConfig(BaseModel):
