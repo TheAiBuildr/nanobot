@@ -18,6 +18,7 @@ from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.spawn import SpawnTool
 from nanobot.agent.tools.cron import CronTool
+from nanobot.agent.progress import ProgressNotifier
 from nanobot.agent.subagent import SubagentManager
 from nanobot.session.manager import SessionManager
 
@@ -48,8 +49,9 @@ class AgentLoop:
         session_manager: SessionManager | None = None,
         mcp_config: "MCPConfig | None" = None,
         composio_config: "ComposioConfig | None" = None,
+        progress_config: "ProgressConfig | None" = None,
     ):
-        from nanobot.config.schema import ExecToolConfig, MCPConfig, ComposioConfig
+        from nanobot.config.schema import ExecToolConfig, MCPConfig, ComposioConfig, ProgressConfig
         from nanobot.cron.service import CronService
         self.bus = bus
         self.provider = provider
@@ -62,6 +64,7 @@ class AgentLoop:
         self.restrict_to_workspace = restrict_to_workspace
         self.mcp_config = mcp_config
         self.composio_config = composio_config
+        self.progress_config = progress_config or ProgressConfig()
         
         self.context = ContextBuilder(workspace)
         self.sessions = session_manager or SessionManager(workspace)
@@ -386,51 +389,64 @@ class AgentLoop:
             chat_id=msg.chat_id,
         )
         
+        # Start progress notifier (auto-acknowledges if processing takes too long)
+        notifier: ProgressNotifier | None = None
+        if self.progress_config.enabled and msg.channel != "cli":
+            notifier = ProgressNotifier(
+                bus=self.bus,
+                delay_seconds=self.progress_config.delay_seconds,
+            )
+            await notifier.start(msg.channel, msg.chat_id, msg.metadata or {})
+        
         # Agent loop
         iteration = 0
         final_content = None
         
-        while iteration < self.max_iterations:
-            iteration += 1
-            
-            # Call LLM
-            response = await self.provider.chat(
-                messages=messages,
-                tools=self.tools.get_definitions(),
-                model=self.model
-            )
-            
-            # Handle tool calls
-            if response.has_tool_calls:
-                # Add assistant message with tool calls
-                tool_call_dicts = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments)  # Must be JSON string
-                        }
-                    }
-                    for tc in response.tool_calls
-                ]
-                messages = self.context.add_assistant_message(
-                    messages, response.content, tool_call_dicts,
-                    reasoning_content=response.reasoning_content,
+        try:
+            while iteration < self.max_iterations:
+                iteration += 1
+                
+                # Call LLM
+                response = await self.provider.chat(
+                    messages=messages,
+                    tools=self.tools.get_definitions(),
+                    model=self.model
                 )
                 
-                # Execute tools
-                for tool_call in response.tool_calls:
-                    args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
-                    logger.info(f"Tool call: {tool_call.name}({args_str[:200]})")
-                    result = await self.tools.execute(tool_call.name, tool_call.arguments)
-                    messages = self.context.add_tool_result(
-                        messages, tool_call.id, tool_call.name, result
+                # Handle tool calls
+                if response.has_tool_calls:
+                    # Add assistant message with tool calls
+                    tool_call_dicts = [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments)  # Must be JSON string
+                            }
+                        }
+                        for tc in response.tool_calls
+                    ]
+                    messages = self.context.add_assistant_message(
+                        messages, response.content, tool_call_dicts,
+                        reasoning_content=response.reasoning_content,
                     )
-            else:
-                # No tool calls, we're done
-                final_content = response.content
-                break
+                    
+                    # Execute tools
+                    for tool_call in response.tool_calls:
+                        args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
+                        logger.info(f"Tool call: {tool_call.name}({args_str[:200]})")
+                        result = await self.tools.execute(tool_call.name, tool_call.arguments)
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, result
+                        )
+                else:
+                    # No tool calls, we're done
+                    final_content = response.content
+                    break
+        finally:
+            if notifier:
+                await notifier.cancel()
         
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
@@ -495,46 +511,59 @@ class AgentLoop:
             chat_id=origin_chat_id,
         )
         
+        # Start progress notifier for system message processing
+        notifier: ProgressNotifier | None = None
+        if self.progress_config.enabled and origin_channel != "cli":
+            notifier = ProgressNotifier(
+                bus=self.bus,
+                delay_seconds=self.progress_config.delay_seconds,
+            )
+            await notifier.start(origin_channel, origin_chat_id, msg.metadata or {})
+        
         # Agent loop (limited for announce handling)
         iteration = 0
         final_content = None
         
-        while iteration < self.max_iterations:
-            iteration += 1
-            
-            response = await self.provider.chat(
-                messages=messages,
-                tools=self.tools.get_definitions(),
-                model=self.model
-            )
-            
-            if response.has_tool_calls:
-                tool_call_dicts = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.name,
-                            "arguments": json.dumps(tc.arguments)
-                        }
-                    }
-                    for tc in response.tool_calls
-                ]
-                messages = self.context.add_assistant_message(
-                    messages, response.content, tool_call_dicts,
-                    reasoning_content=response.reasoning_content,
+        try:
+            while iteration < self.max_iterations:
+                iteration += 1
+                
+                response = await self.provider.chat(
+                    messages=messages,
+                    tools=self.tools.get_definitions(),
+                    model=self.model
                 )
                 
-                for tool_call in response.tool_calls:
-                    args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
-                    logger.info(f"Tool call: {tool_call.name}({args_str[:200]})")
-                    result = await self.tools.execute(tool_call.name, tool_call.arguments)
-                    messages = self.context.add_tool_result(
-                        messages, tool_call.id, tool_call.name, result
+                if response.has_tool_calls:
+                    tool_call_dicts = [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments)
+                            }
+                        }
+                        for tc in response.tool_calls
+                    ]
+                    messages = self.context.add_assistant_message(
+                        messages, response.content, tool_call_dicts,
+                        reasoning_content=response.reasoning_content,
                     )
-            else:
-                final_content = response.content
-                break
+                    
+                    for tool_call in response.tool_calls:
+                        args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
+                        logger.info(f"Tool call: {tool_call.name}({args_str[:200]})")
+                        result = await self.tools.execute(tool_call.name, tool_call.arguments)
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, result
+                        )
+                else:
+                    final_content = response.content
+                    break
+        finally:
+            if notifier:
+                await notifier.cancel()
         
         if final_content is None:
             final_content = "Background task completed."
