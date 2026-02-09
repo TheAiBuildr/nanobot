@@ -154,30 +154,46 @@ class AgentLoop:
         if not self.mcp_config or not self.mcp_config.enabled:
             return
         
+        # Check for the official mcp SDK package first
         try:
-            from nanobot.mcp import MCPServerManager
-            from nanobot.agent.tools.mcp import MCPToolWrapper
+            import mcp  # noqa: F401 -- the official MCP SDK
         except ImportError:
             logger.warning(
                 "MCP is enabled but the 'mcp' package is not installed. "
-                "Install it with: pip install nanobot-ai[mcp]"
+                "Install it with: pip install \"mcp>=1.9.0\""
             )
             return
+        
+        from nanobot.mcp import MCPServerManager
+        from nanobot.agent.tools.mcp import MCPToolWrapper
         
         self._mcp_manager = MCPServerManager(self.mcp_config)
         await self._mcp_manager.start_all()
         
-        # Register discovered MCP tools
+        # Register discovered MCP tools and build context for LLM
+        server_tools: dict[str, list[str]] = {}
         for tool_info in self._mcp_manager.get_all_tools():
             wrapper = MCPToolWrapper(tool_info, self._mcp_manager)
             self.tools.register(wrapper)
             logger.debug(f"Registered MCP tool: {wrapper.name}")
+            server_tools.setdefault(tool_info.server_name, []).append(tool_info.name)
         
         if self._mcp_manager.tool_count > 0:
             logger.info(
                 f"MCP: {self._mcp_manager.server_count} servers, "
                 f"{self._mcp_manager.tool_count} tools registered"
             )
+            
+            # Add MCP context to the system prompt so the LLM knows about them
+            lines = ["# MCP Tools (Model Context Protocol)\n"]
+            lines.append(
+                "You have access to external MCP tools. Use them when relevant. "
+                "MCP tool names are prefixed with `mcp__{server}_{tool}`.\n"
+            )
+            for server, tools in server_tools.items():
+                lines.append(f"## MCP Server: {server}")
+                lines.append(f"Tools: {', '.join(tools)}\n")
+            self.context.add_context_section("\n".join(lines))
     
     async def stop_mcp(self) -> None:
         """Shutdown MCP server manager and clean up resources."""

@@ -42,8 +42,8 @@ class MCPServerManager:
             return
         
         for name, server_config in self.config.servers.items():
+            client = MCPClient(name, server_config)
             try:
-                client = MCPClient(name, server_config)
                 await client.connect()
                 self._clients[name] = client
                 
@@ -62,6 +62,8 @@ class MCPServerManager:
                 
             except Exception as e:
                 logger.error(f"Failed to start MCP server '{name}': {e}")
+                # Ensure the failed client is fully cleaned up
+                await client.close()
                 # Continue with other servers even if one fails
     
     def get_all_tools(self) -> list[MCPToolInfo]:

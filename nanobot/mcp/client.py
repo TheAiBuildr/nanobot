@@ -42,10 +42,16 @@ class MCPClient:
         
         self._stack = AsyncExitStack()
         
-        if self.config.transport == "streamable-http":
-            await self._connect_http()
-        else:
-            await self._connect_stdio()
+        try:
+            if self.config.transport == "streamable-http":
+                await self._connect_http()
+            else:
+                await self._connect_stdio()
+        except Exception:
+            # Clean up the AsyncExitStack on failure to avoid dangling
+            # anyio task groups that crash when garbage collected.
+            await self._safe_close()
+            raise
         
         logger.info(f"MCP client '{self.name}' connected via {self.config.transport}")
     
@@ -149,10 +155,18 @@ class MCPClient:
         
         return "\n".join(text_parts) if text_parts else "(no output)"
     
+    async def _safe_close(self) -> None:
+        """Close the stack, suppressing errors from partially-initialized contexts."""
+        if self._stack:
+            try:
+                await self._stack.aclose()
+            except Exception as e:
+                logger.debug(f"MCP client '{self.name}' cleanup error (ignored): {e}")
+            finally:
+                self._stack = None
+                self._session = None
+    
     async def close(self) -> None:
         """Close the connection and clean up resources."""
-        if self._stack:
-            await self._stack.aclose()
-            self._stack = None
-            self._session = None
-            logger.debug(f"MCP client '{self.name}' closed")
+        await self._safe_close()
+        logger.debug(f"MCP client '{self.name}' closed")

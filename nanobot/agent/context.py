@@ -24,6 +24,11 @@ class ContextBuilder:
         self.workspace = workspace
         self.memory = MemoryStore(workspace)
         self.skills = SkillsLoader(workspace)
+        self._extra_sections: list[str] = []
+    
+    def add_context_section(self, section: str) -> None:
+        """Add an extra section to the system prompt (e.g. MCP tool descriptions)."""
+        self._extra_sections.append(section)
     
     def build_system_prompt(self, skill_names: list[str] | None = None) -> str:
         """
@@ -67,6 +72,9 @@ The following skills extend your capabilities. To use a skill, read its SKILL.md
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
 {skills_summary}""")
+        
+        # Extra sections (e.g. MCP tools)
+        parts.extend(self._extra_sections)
         
         return "\n\n---\n\n".join(parts)
     
