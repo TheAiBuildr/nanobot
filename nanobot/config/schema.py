@@ -183,11 +183,10 @@ class ToolsConfig(BaseModel):
 
 
 class ComposioConfig(BaseModel):
-    """Composio integration configuration."""
+    """Composio integration configuration (Tool Router via MCP)."""
     enabled: bool = False
     api_key: str = ""  # Composio API key
     user_id: str = "default"  # Composio user ID for connected accounts
-    toolkits: list[str] = Field(default_factory=list)  # e.g. ["GITHUB", "GMAIL"]; empty = none
 
 
 class MCPServerConfig(BaseModel):
@@ -197,6 +196,7 @@ class MCPServerConfig(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     transport: str = "stdio"    # "stdio" or "streamable-http"
     url: str | None = None      # For streamable-http transport
+    headers: dict[str, str] = Field(default_factory=dict)  # HTTP headers for streamable-http
 
 
 class MCPConfig(BaseModel):

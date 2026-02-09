@@ -1,6 +1,5 @@
 """Composio integration module."""
 
-from nanobot.composio.manager import ComposioManager
-from nanobot.composio.types import ComposioToolInfo
+from nanobot.composio.manager import ComposioManager, ComposioSession
 
-__all__ = ["ComposioManager", "ComposioToolInfo"]
+__all__ = ["ComposioManager", "ComposioSession"]

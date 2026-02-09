@@ -22,3 +22,4 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 | `summarize` | Summarize URLs, files, and YouTube videos |
 | `tmux` | Remote-control tmux sessions |
 | `skill-creator` | Create new skills |
+| `composio` | Use Composio Tool Router for 800+ external tools (Gmail, Slack, GitHub, etc.) |

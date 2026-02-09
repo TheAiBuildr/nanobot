@@ -89,8 +89,12 @@ class MCPClient:
         if not self.config.url:
             raise ValueError(f"MCP server '{self.name}' uses streamable-http but no URL configured")
         
+        kwargs: dict[str, Any] = {}
+        if self.config.headers:
+            kwargs["headers"] = self.config.headers
+        
         read, write, _ = await self._stack.enter_async_context(
-            streamable_http_client(self.config.url)
+            streamable_http_client(self.config.url, **kwargs)
         )
         self._session = await self._stack.enter_async_context(
             ClientSession(read, write)
