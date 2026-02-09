@@ -348,7 +348,7 @@ def gateway(
     cron_store_path = get_data_dir() / "cron" / "jobs.json"
     cron = CronService(cron_store_path)
     
-    # Create agent with cron service
+    # Create agent with cron service and MCP config
     agent = AgentLoop(
         bus=bus,
         provider=provider,
@@ -360,6 +360,7 @@ def gateway(
         cron_service=cron,
         restrict_to_workspace=config.tools.restrict_to_workspace,
         session_manager=session_manager,
+        mcp_config=config.mcp,
     )
     
     # Set cron callback (needs agent)
@@ -409,6 +410,7 @@ def gateway(
     
     async def run():
         try:
+            await agent.start_mcp()
             await cron.start()
             await heartbeat.start()
             await asyncio.gather(
@@ -420,6 +422,7 @@ def gateway(
             heartbeat.stop()
             cron.stop()
             agent.stop()
+            await agent.stop_mcp()
             await channels.stop_all()
     
     asyncio.run(run())
@@ -462,6 +465,7 @@ def agent(
         brave_api_key=config.tools.web.search.api_key or None,
         exec_config=config.tools.exec,
         restrict_to_workspace=config.tools.restrict_to_workspace,
+        mcp_config=config.mcp,
     )
     
     # Show spinner when logs are off (no output to miss); skip when logs are on
@@ -474,9 +478,13 @@ def agent(
     if message:
         # Single message mode
         async def run_once():
-            with _thinking_ctx():
-                response = await agent_loop.process_direct(message, session_id)
-            _print_agent_response(response, render_markdown=markdown)
+            await agent_loop.start_mcp()
+            try:
+                with _thinking_ctx():
+                    response = await agent_loop.process_direct(message, session_id)
+                _print_agent_response(response, render_markdown=markdown)
+            finally:
+                await agent_loop.stop_mcp()
         
         asyncio.run(run_once())
     else:
@@ -495,33 +503,37 @@ def agent(
         signal.signal(signal.SIGINT, _exit_on_sigint)
         
         async def run_interactive():
-            while True:
-                try:
-                    _flush_pending_tty_input()
-                    user_input = await _read_interactive_input_async()
-                    command = user_input.strip()
-                    if not command:
-                        continue
+            await agent_loop.start_mcp()
+            try:
+                while True:
+                    try:
+                        _flush_pending_tty_input()
+                        user_input = await _read_interactive_input_async()
+                        command = user_input.strip()
+                        if not command:
+                            continue
 
-                    if _is_exit_command(command):
+                        if _is_exit_command(command):
+                            _save_history()
+                            _restore_terminal()
+                            console.print("\nGoodbye!")
+                            break
+                        
+                        with _thinking_ctx():
+                            response = await agent_loop.process_direct(user_input, session_id)
+                        _print_agent_response(response, render_markdown=markdown)
+                    except KeyboardInterrupt:
                         _save_history()
                         _restore_terminal()
                         console.print("\nGoodbye!")
                         break
-                    
-                    with _thinking_ctx():
-                        response = await agent_loop.process_direct(user_input, session_id)
-                    _print_agent_response(response, render_markdown=markdown)
-                except KeyboardInterrupt:
-                    _save_history()
-                    _restore_terminal()
-                    console.print("\nGoodbye!")
-                    break
-                except EOFError:
-                    _save_history()
-                    _restore_terminal()
-                    console.print("\nGoodbye!")
-                    break
+                    except EOFError:
+                        _save_history()
+                        _restore_terminal()
+                        console.print("\nGoodbye!")
+                        break
+            finally:
+                await agent_loop.stop_mcp()
         
         asyncio.run(run_interactive())
 

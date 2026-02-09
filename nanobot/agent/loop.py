@@ -46,8 +46,9 @@ class AgentLoop:
         cron_service: "CronService | None" = None,
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
+        mcp_config: "MCPConfig | None" = None,
     ):
-        from nanobot.config.schema import ExecToolConfig
+        from nanobot.config.schema import ExecToolConfig, MCPConfig
         from nanobot.cron.service import CronService
         self.bus = bus
         self.provider = provider
@@ -58,6 +59,7 @@ class AgentLoop:
         self.exec_config = exec_config or ExecToolConfig()
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
+        self.mcp_config = mcp_config
         
         self.context = ContextBuilder(workspace)
         self.sessions = session_manager or SessionManager(workspace)
@@ -73,6 +75,7 @@ class AgentLoop:
         )
         
         self._running = False
+        self._mcp_manager: "MCPServerManager | None" = None
         self._register_default_tools()
     
     def _register_default_tools(self) -> None:
@@ -140,6 +143,47 @@ class AgentLoop:
         """Stop the agent loop."""
         self._running = False
         logger.info("Agent loop stopping")
+    
+    async def start_mcp(self) -> None:
+        """
+        Start MCP server manager and register MCP tools.
+        
+        Should be called before run() to ensure MCP tools are available.
+        Gracefully degrades if the mcp package is not installed.
+        """
+        if not self.mcp_config or not self.mcp_config.enabled:
+            return
+        
+        try:
+            from nanobot.mcp import MCPServerManager
+            from nanobot.agent.tools.mcp import MCPToolWrapper
+        except ImportError:
+            logger.warning(
+                "MCP is enabled but the 'mcp' package is not installed. "
+                "Install it with: pip install nanobot-ai[mcp]"
+            )
+            return
+        
+        self._mcp_manager = MCPServerManager(self.mcp_config)
+        await self._mcp_manager.start_all()
+        
+        # Register discovered MCP tools
+        for tool_info in self._mcp_manager.get_all_tools():
+            wrapper = MCPToolWrapper(tool_info, self._mcp_manager)
+            self.tools.register(wrapper)
+            logger.debug(f"Registered MCP tool: {wrapper.name}")
+        
+        if self._mcp_manager.tool_count > 0:
+            logger.info(
+                f"MCP: {self._mcp_manager.server_count} servers, "
+                f"{self._mcp_manager.tool_count} tools registered"
+            )
+    
+    async def stop_mcp(self) -> None:
+        """Shutdown MCP server manager and clean up resources."""
+        if self._mcp_manager:
+            await self._mcp_manager.shutdown()
+            self._mcp_manager = None
     
     async def _process_message(self, msg: InboundMessage) -> OutboundMessage | None:
         """

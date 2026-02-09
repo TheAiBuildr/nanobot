@@ -182,6 +182,21 @@ class ToolsConfig(BaseModel):
     restrict_to_workspace: bool = False  # If true, restrict all tool access to workspace directory
 
 
+class MCPServerConfig(BaseModel):
+    """Single MCP server configuration."""
+    command: str = ""           # For stdio: "npx", "uvx", "python", etc.
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    transport: str = "stdio"    # "stdio" or "streamable-http"
+    url: str | None = None      # For streamable-http transport
+
+
+class MCPConfig(BaseModel):
+    """MCP configuration."""
+    enabled: bool = False
+    servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
+
+
 class Config(BaseSettings):
     """Root configuration for nanobot."""
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
@@ -242,6 +257,8 @@ class Config(BaseSettings):
             if spec and spec.is_gateway and spec.default_api_base:
                 return spec.default_api_base
         return None
+    
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     
     class Config:
         env_prefix = "NANOBOT_"
