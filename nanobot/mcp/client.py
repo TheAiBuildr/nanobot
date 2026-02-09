@@ -2,6 +2,7 @@
 
 import os
 from contextlib import AsyncExitStack
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -63,6 +64,9 @@ class MCPClient:
         # Expand environment variables in the env config
         env = self._expand_env(self.config.env)
         
+        # Ensure any directory paths in args exist
+        self._ensure_arg_dirs()
+        
         server_params = StdioServerParameters(
             command=self.config.command,
             args=self.config.args,
@@ -103,6 +107,16 @@ class MCPClient:
             else:
                 result[key] = value
         return result
+    
+    def _ensure_arg_dirs(self) -> None:
+        """Create any directory paths found in server args (e.g. filesystem server roots)."""
+        for arg in self.config.args:
+            # Skip flags and package names
+            if arg.startswith("-") or arg.startswith("@") or ":" in arg:
+                continue
+            p = Path(arg).expanduser()
+            if p.is_absolute() or (not p.is_file() and "/" in arg):
+                p.mkdir(parents=True, exist_ok=True)
     
     async def list_tools(self) -> list["Tool"]:
         """
