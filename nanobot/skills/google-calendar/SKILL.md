@@ -1,6 +1,7 @@
 ---
 name: google-calendar
 description: "Google Calendar event management via Composio. Use when the user needs to (1) create, update, or delete calendar events, (2) list upcoming events or check schedule, (3) find free time slots, (4) manage multiple calendars, (5) quick-add events from natural language, or (6) check availability for meetings."
+metadata: {"nanobot":{"emoji":"📅"}}
 ---
 
 # Google Calendar

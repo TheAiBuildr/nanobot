@@ -1,6 +1,7 @@
 ---
 name: google-docs
 description: "Google Docs document creation and editing via Composio. Use when the user needs to (1) create a new Google Doc, (2) insert or replace text in a document, (3) add headers, footers, or tables, (4) format document content, (5) insert images or page breaks, (6) search for existing documents, or (7) update a document with markdown."
+metadata: {"nanobot":{"emoji":"📝"}}
 ---
 
 # Google Docs

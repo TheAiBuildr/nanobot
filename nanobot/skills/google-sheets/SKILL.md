@@ -1,6 +1,7 @@
 ---
 name: google-sheets
 description: "Google Sheets spreadsheet operations via Composio. Use when the user needs to (1) create or read spreadsheets, (2) add, update, or delete rows and columns, (3) query or filter spreadsheet data, (4) execute SQL against sheet data, (5) create charts, (6) format cells, or (7) search for existing spreadsheets."
+metadata: {"nanobot":{"emoji":"📊"}}
 ---
 
 # Google Sheets

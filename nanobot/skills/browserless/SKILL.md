@@ -1,6 +1,7 @@
 ---
 name: browserless
 description: "Web scraping, screenshots, PDF generation, and browser automation via Browserless. Use when the user needs to (1) take a screenshot of a webpage, (2) scrape or extract data from JavaScript-rendered pages, (3) generate a PDF from a URL, (4) fetch HTML content from dynamic sites, or (5) automate multi-step browser interactions."
+metadata: {"nanobot":{"emoji":"🌐"}}
 ---
 
 # Browserless
@@ -79,13 +80,15 @@ mcp__composio_BROWSERLESS_EXECUTE_CUSTOM_FUNCTION(
 
 Runs arbitrary Puppeteer code for complex multi-step automation (login flows, form filling, navigation sequences).
 
-## When to Use vs web_search
+## When to Use
 
-| web_search | browserless |
-|------------|-------------|
-| Research across multiple sources | Known specific URL |
-| Quick facts and summaries | JavaScript-rendered content |
-| General knowledge queries | Screenshots, PDFs, structured extraction |
+| Tool | Best for |
+|------|----------|
+| `web_search` | Research across multiple sources, quick facts |
+| `mcp__fetch_*` | Simple HTML pages, API endpoints, static content |
+| **browserless** | JavaScript-rendered pages, screenshots, PDFs, automation |
+
+Use the `fetch` MCP server for simple HTTP requests. Use browserless when you need a full browser (JS execution, screenshots, PDFs, form automation).
 
 ## Error Handling
 

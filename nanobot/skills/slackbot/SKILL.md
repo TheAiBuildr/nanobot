@@ -1,6 +1,7 @@
 ---
 name: slackbot
 description: "Slack messaging and workspace management via Composio. Use when the user needs to (1) send messages to Slack channels or users, (2) search for channels or users, (3) read conversation history, (4) manage channels (create, archive, invite), (5) add reactions, (6) set reminders, or (7) manage files in Slack."
+metadata: {"nanobot":{"emoji":"💬"}}
 ---
 
 # Slackbot

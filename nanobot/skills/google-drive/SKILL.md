@@ -1,6 +1,7 @@
 ---
 name: google-drive
 description: "Google Drive file management via Composio. Use when the user needs to (1) upload, download, or create files on Google Drive, (2) search for files or folders, (3) share files with specific permissions, (4) organize files into folders, (5) manage comments or revisions, or (6) work with shared drives."
+metadata: {"nanobot":{"emoji":"📁"}}
 ---
 
 # Google Drive

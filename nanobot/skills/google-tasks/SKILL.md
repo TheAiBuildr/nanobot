@@ -1,6 +1,7 @@
 ---
 name: google-tasks
 description: "Google Tasks management via Composio. Use when the user needs to (1) create, update, or delete tasks, (2) list or organize task lists, (3) manage to-do items and subtasks, (4) mark tasks as complete, or (5) move or reorder tasks."
+metadata: {"nanobot":{"emoji":"✅"}}
 ---
 
 # Google Tasks
