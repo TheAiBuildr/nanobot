@@ -160,7 +160,9 @@ class MCPClient:
         if self._stack:
             try:
                 await self._stack.aclose()
-            except Exception as e:
+            except BaseException as e:
+                # Must catch BaseException: CancelledError is not a subclass of
+                # Exception in Python 3.9+ and anyio raises it during cleanup.
                 logger.debug(f"MCP client '{self.name}' cleanup error (ignored): {e}")
             finally:
                 self._stack = None

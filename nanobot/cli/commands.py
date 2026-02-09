@@ -417,7 +417,9 @@ def gateway(
                 agent.run(),
                 channels.start_all(),
             )
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            pass
+        finally:
             console.print("\nShutting down...")
             heartbeat.stop()
             cron.stop()

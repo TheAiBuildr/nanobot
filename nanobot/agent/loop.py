@@ -198,8 +198,12 @@ class AgentLoop:
     async def stop_mcp(self) -> None:
         """Shutdown MCP server manager and clean up resources."""
         if self._mcp_manager:
-            await self._mcp_manager.shutdown()
-            self._mcp_manager = None
+            try:
+                await self._mcp_manager.shutdown()
+            except BaseException as e:
+                logger.debug(f"MCP shutdown error (ignored): {e}")
+            finally:
+                self._mcp_manager = None
     
     async def _process_message(self, msg: InboundMessage) -> OutboundMessage | None:
         """

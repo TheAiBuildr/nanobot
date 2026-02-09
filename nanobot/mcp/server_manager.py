@@ -103,8 +103,8 @@ class MCPServerManager:
             try:
                 await client.close()
                 logger.debug(f"MCP server '{name}' shut down")
-            except Exception as e:
-                logger.error(f"Error shutting down MCP server '{name}': {e}")
+            except BaseException as e:
+                logger.debug(f"MCP server '{name}' cleanup error (ignored): {e}")
         
         self._clients.clear()
         self._tools.clear()
