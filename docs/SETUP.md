@@ -201,7 +201,47 @@ nanobot cron remove <job_id>
 
 ---
 
-## 9. Security Options
+## 9. Composio Integration (800+ External Tools)
+
+nanobot can connect to [Composio](https://composio.dev) to access 800+ tools across popular apps (GitHub, Gmail, Slack, etc.) with managed authentication.
+
+### Install
+
+```bash
+pip install "nanobot-ai[composio]"
+```
+
+### Configure
+
+Add the `composio` section to `~/.nanobot/config.json`:
+
+```json
+{
+  "composio": {
+    "enabled": true,
+    "apiKey": "YOUR_COMPOSIO_API_KEY",
+    "userId": "default",
+    "toolkits": ["GITHUB", "GMAIL"]
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Set to `true` to activate Composio tools |
+| `apiKey` | Your Composio API key (get one at [app.composio.dev](https://app.composio.dev)) |
+| `userId` | Composio user ID for connected accounts (default: `"default"`) |
+| `toolkits` | List of toolkit slugs to load (e.g. `["GITHUB", "GMAIL", "SLACK"]`) |
+
+### Usage
+
+Once configured, Composio tools appear automatically alongside built-in tools. Tool names are prefixed with `composio__` (e.g. `composio__GITHUB_CREATE_ISSUE`).
+
+The agent will use Composio tools when relevant to user requests. Connected account authentication (OAuth, API keys) is managed through the Composio dashboard.
+
+---
+
+## 10. Security Options
 
 For production, enable workspace restriction:
 
@@ -217,7 +257,7 @@ This sandboxes all file and shell operations to the workspace directory.
 
 ---
 
-## 10. Check Status
+## 11. Check Status
 
 ```bash
 nanobot status           # Show config and provider status

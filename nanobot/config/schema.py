@@ -182,6 +182,14 @@ class ToolsConfig(BaseModel):
     restrict_to_workspace: bool = False  # If true, restrict all tool access to workspace directory
 
 
+class ComposioConfig(BaseModel):
+    """Composio integration configuration."""
+    enabled: bool = False
+    api_key: str = ""  # Composio API key
+    user_id: str = "default"  # Composio user ID for connected accounts
+    toolkits: list[str] = Field(default_factory=list)  # e.g. ["GITHUB", "GMAIL"]; empty = none
+
+
 class MCPServerConfig(BaseModel):
     """Single MCP server configuration."""
     command: str = ""           # For stdio: "npx", "uvx", "python", etc.
@@ -259,6 +267,7 @@ class Config(BaseSettings):
         return None
     
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    composio: ComposioConfig = Field(default_factory=ComposioConfig)
     
     class Config:
         env_prefix = "NANOBOT_"

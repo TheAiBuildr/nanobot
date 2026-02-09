@@ -361,6 +361,7 @@ def gateway(
         restrict_to_workspace=config.tools.restrict_to_workspace,
         session_manager=session_manager,
         mcp_config=config.mcp,
+        composio_config=config.composio,
     )
     
     # Set cron callback (needs agent)
@@ -411,6 +412,7 @@ def gateway(
     async def run():
         try:
             await agent.start_mcp()
+            await agent.start_composio()
             await cron.start()
             await heartbeat.start()
             await asyncio.gather(
@@ -424,6 +426,7 @@ def gateway(
             heartbeat.stop()
             cron.stop()
             agent.stop()
+            await agent.stop_composio()
             await agent.stop_mcp()
             await channels.stop_all()
     
@@ -468,6 +471,7 @@ def agent(
         exec_config=config.tools.exec,
         restrict_to_workspace=config.tools.restrict_to_workspace,
         mcp_config=config.mcp,
+        composio_config=config.composio,
     )
     
     # Show spinner when logs are off (no output to miss); skip when logs are on
@@ -481,11 +485,13 @@ def agent(
         # Single message mode
         async def run_once():
             await agent_loop.start_mcp()
+            await agent_loop.start_composio()
             try:
                 with _thinking_ctx():
                     response = await agent_loop.process_direct(message, session_id)
                 _print_agent_response(response, render_markdown=markdown)
             finally:
+                await agent_loop.stop_composio()
                 await agent_loop.stop_mcp()
         
         asyncio.run(run_once())
@@ -506,6 +512,7 @@ def agent(
         
         async def run_interactive():
             await agent_loop.start_mcp()
+            await agent_loop.start_composio()
             try:
                 while True:
                     try:
@@ -535,6 +542,7 @@ def agent(
                         console.print("\nGoodbye!")
                         break
             finally:
+                await agent_loop.stop_composio()
                 await agent_loop.stop_mcp()
         
         asyncio.run(run_interactive())

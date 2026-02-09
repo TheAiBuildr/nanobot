@@ -47,8 +47,9 @@ class AgentLoop:
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
         mcp_config: "MCPConfig | None" = None,
+        composio_config: "ComposioConfig | None" = None,
     ):
-        from nanobot.config.schema import ExecToolConfig, MCPConfig
+        from nanobot.config.schema import ExecToolConfig, MCPConfig, ComposioConfig
         from nanobot.cron.service import CronService
         self.bus = bus
         self.provider = provider
@@ -60,6 +61,7 @@ class AgentLoop:
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
         self.mcp_config = mcp_config
+        self.composio_config = composio_config
         
         self.context = ContextBuilder(workspace)
         self.sessions = session_manager or SessionManager(workspace)
@@ -76,6 +78,7 @@ class AgentLoop:
         
         self._running = False
         self._mcp_manager: "MCPServerManager | None" = None
+        self._composio_manager: "ComposioManager | None" = None
         self._register_default_tools()
     
     def _register_default_tools(self) -> None:
@@ -204,6 +207,68 @@ class AgentLoop:
                 logger.debug(f"MCP shutdown error (ignored): {e}")
             finally:
                 self._mcp_manager = None
+    
+    async def start_composio(self) -> None:
+        """
+        Start Composio manager and register Composio tools.
+
+        Should be called before run() to ensure Composio tools are available.
+        Gracefully degrades if the composio package is not installed.
+        """
+        if not self.composio_config or not self.composio_config.enabled:
+            return
+
+        # Check for the composio SDK
+        try:
+            import composio  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "Composio is enabled but the 'composio' package is not installed. "
+                "Install it with: pip install \"nanobot-ai[composio]\""
+            )
+            return
+
+        from nanobot.composio import ComposioManager
+        from nanobot.agent.tools.composio import ComposioToolWrapper
+
+        self._composio_manager = ComposioManager(self.composio_config)
+        await self._composio_manager.start()
+
+        # Register discovered Composio tools and build context for LLM
+        toolkit_tools: dict[str, list[str]] = {}
+        for tool_info in self._composio_manager.get_all_tools():
+            wrapper = ComposioToolWrapper(tool_info, self._composio_manager)
+            self.tools.register(wrapper)
+            logger.debug(f"Registered Composio tool: {wrapper.name}")
+            # Group by toolkit prefix (e.g. GITHUB, GMAIL)
+            prefix = tool_info.slug.split("_")[0] if "_" in tool_info.slug else "OTHER"
+            toolkit_tools.setdefault(prefix, []).append(tool_info.slug)
+
+        if self._composio_manager.tool_count > 0:
+            logger.info(
+                f"Composio: {self._composio_manager.tool_count} tools registered"
+            )
+
+            # Add Composio context to the system prompt
+            lines = ["# Composio Tools\n"]
+            lines.append(
+                "You have access to external Composio tools. Use them when relevant. "
+                "Composio tool names are prefixed with `composio__`.\n"
+            )
+            for toolkit, tools in toolkit_tools.items():
+                lines.append(f"## Toolkit: {toolkit}")
+                lines.append(f"Tools: {', '.join(tools)}\n")
+            self.context.add_context_section("\n".join(lines))
+
+    async def stop_composio(self) -> None:
+        """Shutdown Composio manager and clean up resources."""
+        if self._composio_manager:
+            try:
+                await self._composio_manager.shutdown()
+            except BaseException as e:
+                logger.debug(f"Composio shutdown error (ignored): {e}")
+            finally:
+                self._composio_manager = None
     
     async def _process_message(self, msg: InboundMessage) -> OutboundMessage | None:
         """
