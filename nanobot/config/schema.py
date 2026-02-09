@@ -182,6 +182,13 @@ class ToolsConfig(BaseModel):
     restrict_to_workspace: bool = False  # If true, restrict all tool access to workspace directory
 
 
+class ComposioConfig(BaseModel):
+    """Composio integration configuration (Tool Router via MCP)."""
+    enabled: bool = False
+    api_key: str = ""  # Composio API key
+    user_id: str = "default"  # Composio user ID for connected accounts
+
+
 class MCPServerConfig(BaseModel):
     """Single MCP server configuration."""
     command: str = ""           # For stdio: "npx", "uvx", "python", etc.
@@ -189,6 +196,7 @@ class MCPServerConfig(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
     transport: str = "stdio"    # "stdio" or "streamable-http"
     url: str | None = None      # For streamable-http transport
+    headers: dict[str, str] = Field(default_factory=dict)  # HTTP headers for streamable-http
 
 
 class MCPConfig(BaseModel):
@@ -259,6 +267,7 @@ class Config(BaseSettings):
         return None
     
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    composio: ComposioConfig = Field(default_factory=ComposioConfig)
     
     class Config:
         env_prefix = "NANOBOT_"

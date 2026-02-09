@@ -201,7 +201,45 @@ nanobot cron remove <job_id>
 
 ---
 
-## 9. Security Options
+## 9. Composio Integration (800+ External Tools)
+
+nanobot can connect to [Composio](https://composio.dev) to access 800+ tools across popular apps (GitHub, Gmail, Slack, etc.) with managed authentication.
+
+### Install
+
+```bash
+pip install "nanobot-ai[mcp,composio]"
+```
+
+### Configure
+
+Add the `composio` section to `~/.nanobot/config.json`:
+
+```json
+{
+  "composio": {
+    "enabled": true,
+    "apiKey": "YOUR_COMPOSIO_API_KEY",
+    "userId": "default"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Set to `true` to activate Composio tools |
+| `apiKey` | Your Composio API key (get one at [app.composio.dev](https://app.composio.dev)) |
+| `userId` | Composio user ID for connected accounts (default: `"default"`) |
+
+### Usage
+
+Composio uses a **Tool Router** that exposes tools through an MCP endpoint. When enabled, nanobot creates a Tool Router session and connects to it using the built-in MCP client. Tools are discovered automatically and appear alongside built-in tools, prefixed with `mcp__composio_`.
+
+Connected account authentication (OAuth, API keys) is managed through the [Composio dashboard](https://app.composio.dev).
+
+---
+
+## 10. Security Options
 
 For production, enable workspace restriction:
 
@@ -217,7 +255,7 @@ This sandboxes all file and shell operations to the workspace directory.
 
 ---
 
-## 10. Check Status
+## 11. Check Status
 
 ```bash
 nanobot status           # Show config and provider status

@@ -47,8 +47,9 @@ class AgentLoop:
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
         mcp_config: "MCPConfig | None" = None,
+        composio_config: "ComposioConfig | None" = None,
     ):
-        from nanobot.config.schema import ExecToolConfig, MCPConfig
+        from nanobot.config.schema import ExecToolConfig, MCPConfig, ComposioConfig
         from nanobot.cron.service import CronService
         self.bus = bus
         self.provider = provider
@@ -60,6 +61,7 @@ class AgentLoop:
         self.cron_service = cron_service
         self.restrict_to_workspace = restrict_to_workspace
         self.mcp_config = mcp_config
+        self.composio_config = composio_config
         
         self.context = ContextBuilder(workspace)
         self.sessions = session_manager or SessionManager(workspace)
@@ -76,6 +78,8 @@ class AgentLoop:
         
         self._running = False
         self._mcp_manager: "MCPServerManager | None" = None
+        self._composio_manager: "ComposioManager | None" = None
+        self._composio_mcp_client: "MCPClient | None" = None
         self._register_default_tools()
     
     def _register_default_tools(self) -> None:
@@ -204,6 +208,140 @@ class AgentLoop:
                 logger.debug(f"MCP shutdown error (ignored): {e}")
             finally:
                 self._mcp_manager = None
+    
+    async def start_composio(self) -> None:
+        """
+        Start Composio Tool Router and register tools via MCP.
+
+        Creates a Composio session, connects to its MCP endpoint, discovers
+        tools, and registers them using the existing MCP tool wrapper.
+        Gracefully degrades if the composio package is not installed.
+        """
+        if not self.composio_config or not self.composio_config.enabled:
+            return
+
+        # Check for the composio SDK
+        try:
+            import composio  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "Composio is enabled but the 'composio' package is not installed. "
+                "Install it with: pip install \"nanobot-ai[composio]\""
+            )
+            return
+
+        # Also need the mcp SDK for the MCP client
+        try:
+            import mcp  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "Composio requires the 'mcp' package for Tool Router. "
+                "Install it with: pip install \"nanobot-ai[mcp,composio]\""
+            )
+            return
+
+        from nanobot.composio import ComposioManager
+        from nanobot.mcp.client import MCPClient
+        from nanobot.mcp.types import MCPToolInfo
+        from nanobot.agent.tools.mcp import MCPToolWrapper
+        from nanobot.config.schema import MCPServerConfig
+
+        self._composio_manager = ComposioManager(self.composio_config)
+        session = await self._composio_manager.start()
+
+        if not session or not session.mcp_url:
+            logger.warning("Composio: failed to create Tool Router session")
+            return
+
+        # Create an MCP client pointing at the Composio Tool Router endpoint
+        composio_mcp_config = MCPServerConfig(
+            transport="streamable-http",
+            url=session.mcp_url,
+            headers=session.mcp_headers,
+        )
+        client = MCPClient("composio", composio_mcp_config)
+
+        try:
+            await client.connect()
+            self._composio_mcp_client = client
+        except Exception as e:
+            logger.error(f"Composio: failed to connect to Tool Router MCP endpoint: {e}")
+            await client.close()
+            return
+
+        # Discover tools from the Composio MCP endpoint
+        tools = await client.list_tools()
+        tool_names: list[str] = []
+
+        for tool in tools:
+            tool_info = MCPToolInfo(
+                server_name="composio",
+                name=tool.name,
+                description=tool.description or "",
+                input_schema=tool.inputSchema if tool.inputSchema else {
+                    "type": "object", "properties": {}
+                },
+            )
+            wrapper = MCPToolWrapper(tool_info, self._composio_mcp_adapter)
+            self.tools.register(wrapper)
+            tool_names.append(tool.name)
+            logger.debug(f"Registered Composio tool: {wrapper.name}")
+
+        if tool_names:
+            logger.info(f"Composio: {len(tool_names)} tools registered via Tool Router")
+
+            # Add rich context to the system prompt so the LLM knows how to
+            # discover and use Composio tools effectively.
+            context = (
+                "# Composio Tools (via Tool Router)\n\n"
+                "You have access to Composio's Tool Router for 800+ external tools "
+                "(Gmail, Slack, GitHub, etc.). All Composio tools are prefixed "
+                "with `mcp__composio_`.\n\n"
+                "## Key workflow\n"
+                "1. **Search** for tools: `mcp__composio_COMPOSIO_SEARCH_TOOLS` "
+                "(always start here when the user wants to interact with an external app)\n"
+                "2. **Check/connect** apps: `mcp__composio_COMPOSIO_MANAGE_CONNECTIONS` "
+                "(verify auth or help the user connect a new app)\n"
+                "3. **Get schemas**: `mcp__composio_COMPOSIO_GET_TOOL_SCHEMAS` "
+                "(get full parameter details before executing -- never guess parameters)\n"
+                "4. **Execute**: use the discovered tool directly, or "
+                "`mcp__composio_COMPOSIO_MULTI_EXECUTE_TOOL`\n\n"
+                "## Code interpreter\n"
+                "- `mcp__composio_COMPOSIO_REMOTE_WORKBENCH` -- run Python in a "
+                "persistent remote sandbox\n"
+                "- `mcp__composio_COMPOSIO_REMOTE_BASH_TOOL` -- run shell commands "
+                "in the same sandbox\n\n"
+                f"Registered tools ({len(tool_names)}): {', '.join(tool_names)}\n"
+            )
+            self.context.add_context_section(context)
+
+    @property
+    def _composio_mcp_adapter(self) -> "_ComposioMCPAdapter":
+        """
+        Adapter that lets MCPToolWrapper call tools on the Composio MCP client.
+
+        MCPToolWrapper expects a manager with call_tool(server_name, tool_name, args).
+        This property returns a lightweight adapter that routes to our dedicated client.
+        """
+        return _ComposioMCPAdapter(self._composio_mcp_client)
+
+    async def stop_composio(self) -> None:
+        """Shutdown Composio manager and MCP client."""
+        client = getattr(self, "_composio_mcp_client", None)
+        if client:
+            try:
+                await client.close()
+            except BaseException as e:
+                logger.debug(f"Composio MCP client shutdown error (ignored): {e}")
+            finally:
+                self._composio_mcp_client = None
+        if self._composio_manager:
+            try:
+                await self._composio_manager.shutdown()
+            except BaseException as e:
+                logger.debug(f"Composio shutdown error (ignored): {e}")
+            finally:
+                self._composio_manager = None
     
     async def _process_message(self, msg: InboundMessage) -> OutboundMessage | None:
         """
@@ -440,3 +578,19 @@ class AgentLoop:
         
         response = await self._process_message(msg)
         return response.content if response else ""
+
+
+class _ComposioMCPAdapter:
+    """
+    Lightweight adapter so MCPToolWrapper can call Composio's MCP client.
+
+    MCPToolWrapper expects a manager with call_tool(server_name, tool_name, args).
+    This adapter routes all calls to the dedicated Composio MCPClient.
+    """
+
+    def __init__(self, client: "MCPClient"):
+        self._client = client
+
+    async def call_tool(self, server_name: str, tool_name: str, arguments: dict) -> str:
+        """Route tool call to the Composio MCP client."""
+        return await self._client.call_tool(tool_name, arguments)
