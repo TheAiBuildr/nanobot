@@ -12,19 +12,18 @@ from nanobot.providers.registry import find_by_model, find_gateway
 
 
 class LiteLLMProvider(LLMProvider):
-    """
-    LLM provider using LiteLLM for multi-provider support.
+    """ LLM provider using LiteLLM for multi-provider support.
     
-    Supports OpenRouter, Anthropic, OpenAI, Gemini, and many other providers through
-    a unified interface.  Provider-specific logic is driven by the registry
-    (see providers/registry.py) — no if-elif chains needed here.
-    """
+        Supports OpenRouter, Anthropic, OpenAI, Gemini, and many other providers through
+        a unified interface.  Provider-specific logic is driven by the registry
+        (see providers/registry.py) — no if-elif chains needed here.
+        """
     
     def __init__(
         self, 
         api_key: str | None = None, 
         api_base: str | None = None,
-        default_model: str = "anthropic/claude-opus-4-5",
+        default_model: str = "moonshotai/kimi-k2.5",
         extra_headers: dict[str, str] | None = None,
         provider_name: str | None = None,
     ):
@@ -41,8 +40,14 @@ class LiteLLMProvider(LLMProvider):
         if api_key:
             self._setup_env(api_key, api_base, default_model)
         
-        if api_base:
-            litellm.api_base = api_base
+        # Apply default_api_base from registry if not explicitly set
+        effective_base = api_base
+        if not effective_base and self._gateway and self._gateway.default_api_base:
+            effective_base = self._gateway.default_api_base
+        
+        if effective_base:
+            self.api_base = effective_base
+            litellm.api_base = effective_base
         
         # Disable LiteLLM logging noise
         litellm.suppress_debug_info = True
