@@ -29,7 +29,7 @@ class ComposioManager:
 
     def __init__(self, config: ComposioConfig):
         self.config = config
-        self._client: Any = None  # composio.Composio instance (lazy)
+        self._client: Any = None
         self._session: ComposioSession | None = None
 
     async def start(self) -> ComposioSession | None:

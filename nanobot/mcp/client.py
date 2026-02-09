@@ -84,7 +84,7 @@ class MCPClient:
     async def _connect_http(self) -> None:
         """Connect via streamable HTTP transport."""
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamable_http_client
+        from mcp.client.streamable_http import streamablehttp_client as streamable_http_client
         
         if not self.config.url:
             raise ValueError(f"MCP server '{self.name}' uses streamable-http but no URL configured")
